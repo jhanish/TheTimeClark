@@ -21,7 +21,7 @@
 #define INTERVAL 400
 #define WAIT vTaskDelay(INTERVAL)
 
-static const char *TAG = "ST7789";
+static const char *TAG = "TheTimeClark";
 
 // You have to set these CONFIG value using menuconfig.
 #if 0
@@ -435,6 +435,43 @@ TickType_t RoundRectTest(TFT_t * dev, int width, int height) {
 		//ESP_LOGI(__FUNCTION__, "i=%d, width-i-1=%d",i, width-i-1);
 		lcdDrawRoundRect(dev, i, i, (width-i-1), (height-i-1), 10, color);
 	}
+	lcdDrawFinish(dev);
+
+	endTick = xTaskGetTickCount();
+	diffTick = endTick - startTick;
+	ESP_LOGI(__FUNCTION__, "elapsed time[ms]:%"PRIu32,diffTick*portTICK_PERIOD_MS);
+	return diffTick;
+}
+
+TickType_t doProjectScreen(TFT_t * dev, int width, int height) {
+	TickType_t startTick, endTick, diffTick;
+	startTick = xTaskGetTickCount();
+
+	uint16_t color;
+	lcdFillScreen(dev, BLACK);
+	WAIT;
+
+	lcdDrawFillRect(dev, 0, 0, 50, 320, GREEN);
+	
+
+/*
+	uint16_t red;
+	uint16_t green;
+	uint16_t blue;
+	srand( (unsigned int)time( NULL ) );
+	for(int i=1;i<100;i++) {
+		red=rand()%255;
+		green=rand()%255;
+		blue=rand()%255;
+		color=rgb565(red, green, blue);
+		uint16_t xpos=rand()%width;
+		uint16_t ypos=rand()%height;
+		uint16_t size=rand()%(width/5);
+		lcdDrawFillRect(dev, xpos, ypos, xpos+size, ypos+size, color);
+	}
+
+*/
+    WAIT; WAIT; WAIT;
 	lcdDrawFinish(dev);
 
 	endTick = xTaskGetTickCount();
@@ -1475,7 +1512,7 @@ TickType_t CursorTest(TFT_t * dev, FontxFile *fx, int width, int height) {
 	return diffTick;
 }
 
-void ST7789(void *pvParameters)
+void TheTimeClark(void *pvParameters)
 {
 	// set font file
 	FontxFile fx16G[2];
@@ -1522,6 +1559,7 @@ void ST7789(void *pvParameters)
 	while(1) {
 		traceHeap();
 
+		/*
 		FillTest(&dev, CONFIG_WIDTH, CONFIG_HEIGHT);
 		WAIT;
 
@@ -1569,7 +1607,13 @@ void ST7789(void *pvParameters)
 		}
 		WAIT;
 
+	*/	
+
 		FillRectTest(&dev, CONFIG_WIDTH, CONFIG_HEIGHT);
+		WAIT;
+
+		doProjectScreen(&dev, CONFIG_WIDTH, CONFIG_HEIGHT);
+		WAIT;
 		WAIT;
 
 		ColorTest(&dev, CONFIG_WIDTH, CONFIG_HEIGHT);
@@ -1778,5 +1822,5 @@ void app_main(void)
 	ESP_ERROR_CHECK(mountSPIFFS("/icons", "storage3", 1));
 	listSPIFFS("/icons/");
 
-	xTaskCreate(ST7789, "ST7789", 1024*6, NULL, 2, NULL);
+	xTaskCreate(TheTimeClark, "TheTimeClark", 1024*6, NULL, 2, NULL);
 }
