@@ -275,7 +275,7 @@ TickType_t VerticalTest(TFT_t * dev, FontxFile *fx, int width, int height) {
 	uint16_t color;
 	lcdFillScreen(dev, BLACK);
 	uint8_t ascii[20];
-
+// 
 	color = RED;
 	strcpy((char *)ascii, "Direction=1");
 	lcdSetFontDirection(dev, 1);
@@ -443,16 +443,41 @@ TickType_t RoundRectTest(TFT_t * dev, int width, int height) {
 	return diffTick;
 }
 
-TickType_t doProjectScreen(TFT_t * dev, int width, int height) {
+TickType_t doProjectScreen(TFT_t * dev, int width, int height, FontxFile *fx, FontxFile *fx2, FontxFile *fx3, FontxFile *fx4) {
 	TickType_t startTick, endTick, diffTick;
 	startTick = xTaskGetTickCount();
 
 	uint16_t color;
 	lcdFillScreen(dev, BLACK);
-	WAIT;
 
-	lcdDrawFillRect(dev, 0, 0, 50, 320, GREEN);
+	lcdDrawFillRect(dev, 4, 4, 85, 316, GREEN);
 	
+	uint8_t fontWidth;
+	uint8_t fontHeight;
+	GetFontx(fx, 0, &fontWidth, &fontHeight);
+
+	color = GRAY;
+	uint8_t ascii[20];
+	strcpy((char *)ascii, "01");
+	lcdSetFontDirection(dev, 1);
+	lcdDrawString(dev, fx, 130, 5, ascii, color);
+	strcpy((char *)ascii, "The TimeClark");
+	lcdDrawString(dev, fx, 130, 55, ascii, WHITE);
+
+	GetFontx(fx2, 0, &fontWidth, &fontHeight);
+	strcpy((char *)ascii, "27.5 Hrs this week");
+	lcdDrawString(dev, fx2, 100, 5, ascii, CYAN);
+
+	strcpy((char *)ascii, "WED 09/18/2025");
+	lcdDrawString(dev, fx2, 48, 16, ascii, BLACK);
+
+	strcpy((char *)ascii, "07:42PM");
+	lcdDrawString(dev, fx2, 48, 205, ascii, BLACK);
+
+	strcpy((char *)ascii, "06:37:49");
+	lcdDrawString(dev, fx, 11, 150, ascii, BLACK);
+
+
 
 /*
 	uint16_t red;
@@ -1607,14 +1632,18 @@ void TheTimeClark(void *pvParameters)
 		}
 		WAIT;
 
-	*/	
+		
 
 		FillRectTest(&dev, CONFIG_WIDTH, CONFIG_HEIGHT);
 		WAIT;
 
-		doProjectScreen(&dev, CONFIG_WIDTH, CONFIG_HEIGHT);
+*/
+
+		doProjectScreen(&dev, CONFIG_WIDTH, CONFIG_HEIGHT, fx32G, fx24G, fx16G, fx32L);
 		WAIT;
 		WAIT;
+
+/*
 
 		ColorTest(&dev, CONFIG_WIDTH, CONFIG_HEIGHT);
 		WAIT;
@@ -1740,6 +1769,11 @@ void TheTimeClark(void *pvParameters)
 		lcdDrawFinish(&dev);
 		lcdSetFontDirection(&dev, 0);
 		WAIT;
+
+
+*/
+
+
 
 	} // end while
 
