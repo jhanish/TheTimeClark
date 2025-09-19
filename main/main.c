@@ -460,23 +460,47 @@ TickType_t doProjectScreen(TFT_t * dev, int width, int height, FontxFile *fx, Fo
 	uint8_t ascii[20];
 	strcpy((char *)ascii, "01");
 	lcdSetFontDirection(dev, 1);
-	lcdDrawString(dev, fx, 130, 5, ascii, color);
+	lcdDrawString(dev, fx, 130, 10, ascii, color);
 	strcpy((char *)ascii, "The TimeClark");
-	lcdDrawString(dev, fx, 130, 55, ascii, WHITE);
+	lcdDrawString(dev, fx, 130, 60, ascii, WHITE);
 
 	GetFontx(fx2, 0, &fontWidth, &fontHeight);
 	strcpy((char *)ascii, "27.5 Hrs this week");
-	lcdDrawString(dev, fx2, 100, 5, ascii, CYAN);
+	lcdDrawString(dev, fx2, 100, 10, ascii, CYAN);
 
-	strcpy((char *)ascii, "WED 09/18/2025");
-	lcdDrawString(dev, fx2, 48, 16, ascii, BLACK);
 
-	strcpy((char *)ascii, "07:42PM");
-	lcdDrawString(dev, fx2, 48, 205, ascii, BLACK);
+
+	// The date
+	time_t now;
+	struct tm timeinfo;
+	time(&now);
+	localtime_r(&now, &timeinfo);
+
+	//strcpy((char *)ascii, "WED 09/18/2025");
+	char strftime_buf[64];
+	strftime(strftime_buf, sizeof(strftime_buf), "%a %m/%d/%Y", &timeinfo);
+	strcpy((char *)ascii, strftime_buf);
+	lcdDrawString(dev, fx2, 52, 12, ascii, BLACK);
+
+	strftime(strftime_buf, sizeof(strftime_buf), "%I:%M %p", &timeinfo);
+
+	strcpy((char *)ascii, strftime_buf);
+	lcdDrawString(dev, fx2, 52, 205, ascii, BLACK);
 
 	strcpy((char *)ascii, "06:37:49");
-	lcdDrawString(dev, fx, 11, 150, ascii, BLACK);
+	lcdDrawString(dev, fx, 7, 160, ascii, BLACK);
 
+
+
+	// Horizontal line 
+	lcdDrawLine(dev, 46, 1, 46, 318, BLACK);
+	lcdDrawLine(dev, 47, 1, 47, 318, BLACK);
+	lcdDrawLine(dev, 48, 1, 48, 318, BLACK);
+
+	// Vertical line coming from the previous
+	lcdDrawLine(dev, 88, 194, 46, 194, BLACK);
+	lcdDrawLine(dev, 88, 195, 46, 195, BLACK);
+	lcdDrawLine(dev, 88, 196, 46, 196, BLACK);
 
 
 /*
@@ -1640,8 +1664,7 @@ void TheTimeClark(void *pvParameters)
 */
 
 		doProjectScreen(&dev, CONFIG_WIDTH, CONFIG_HEIGHT, fx32G, fx24G, fx16G, fx32L);
-		WAIT;
-		WAIT;
+
 
 /*
 
