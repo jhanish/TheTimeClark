@@ -443,7 +443,18 @@ TickType_t RoundRectTest(TFT_t * dev, int width, int height) {
 	return diffTick;
 }
 
-TickType_t doProjectScreen(TFT_t * dev, int width, int height, FontxFile *fx, FontxFile *fx2, FontxFile *fx3, FontxFile *fx4) {
+
+
+
+
+
+
+
+
+
+
+
+TickType_t doProjectScreen(TFT_t * dev, int width, int height, FontxFile *fx, FontxFile *fx2, FontxFile *fx3, FontxFile *fx4, FontxFile *fx5) {
 	TickType_t startTick, endTick, diffTick;
 	startTick = xTaskGetTickCount();
 
@@ -488,7 +499,7 @@ TickType_t doProjectScreen(TFT_t * dev, int width, int height, FontxFile *fx, Fo
 	lcdDrawString(dev, fx2, 52, 205, ascii, BLACK);
 
 	strcpy((char *)ascii, "06:37:49");
-	lcdDrawString(dev, fx, 7, 160, ascii, BLACK);
+	lcdDrawString(dev, fx5, 7, 115, ascii, BLACK);
 
 
 
@@ -520,7 +531,7 @@ TickType_t doProjectScreen(TFT_t * dev, int width, int height, FontxFile *fx, Fo
 	}
 
 */
-    WAIT; WAIT; WAIT;
+    
 	lcdDrawFinish(dev);
 
 	endTick = xTaskGetTickCount();
@@ -528,6 +539,18 @@ TickType_t doProjectScreen(TFT_t * dev, int width, int height, FontxFile *fx, Fo
 	ESP_LOGI(__FUNCTION__, "elapsed time[ms]:%"PRIu32,diffTick*portTICK_PERIOD_MS);
 	return diffTick;
 }
+
+
+
+
+
+
+
+
+
+
+
+
 
 TickType_t FillRectTest(TFT_t * dev, int width, int height) {
 	TickType_t startTick, endTick, diffTick;
@@ -1568,18 +1591,45 @@ void TheTimeClark(void *pvParameters)
 	FontxFile fx24G[2];
 	FontxFile fx32G[2];
 	FontxFile fx32L[2];
+	FontxFile fxDSEG7[2];
+	FontxFile fxDSEG7M[2];
+	FontxFile fxDSEG24[2];
+
 	InitFontx(fx16G,"/fonts/ILGH16XB.FNT",""); // 8x16Dot Gothic
 	InitFontx(fx24G,"/fonts/ILGH24XB.FNT",""); // 12x24Dot Gothic
 	InitFontx(fx32G,"/fonts/ILGH32XB.FNT",""); // 16x32Dot Gothic
 	InitFontx(fx32L,"/fonts/LATIN32B.FNT",""); // 16x32Dot Latin
+	InitFontx(fxDSEG7,"/fonts/DSEG7.FNT",""); // 7 Segment Display 
+	InitFontx(fxDSEG7M,"/fonts/DSEG7M.FNT",""); // 7 Segment Display Medium
+	InitFontx(fxDSEG24,"/fonts/DSEG24.FNT",""); // 7 Segment Display 24Dot
 
+	/*
+	FontxFile fxdigii15[2];
+	FontxFile fxdigii30[2];
+	FontxFile fxdigii45[2];
+
+	InitFontx(fxdigii15, "/fonts/DIGII-15.FNT", ""); // 8x15Dot Digital Italic
+	InitFontx(fxdigii30, "/fonts/DIGII-30.FNT", ""); // 16x30Dot Digital Italic
+	InitFontx(fxdigii45, "/fonts/DIGII-45.FNT", ""); // 24x45Dot Digital Italic
+
+	FontxFile fxdigit15[2];
+	FontxFile fxdigit30[2];
+	FontxFile fxdigit45[2];
+
+	InitFontx(fxdigit15, "/fonts/DIGIT-15.FNT", ""); // 8x15Dot Digital Italic
+	InitFontx(fxdigit30, "/fonts/DIGIT-30.FNT", ""); // 16x30Dot Digital Italic
+	InitFontx(fxdigit45, "/fonts/DIGIT-45.FNT", ""); // 24x45Dot Digital Italic
+	*/
+
+
+/*
 	FontxFile fx16M[2];
 	FontxFile fx24M[2];
 	FontxFile fx32M[2];
 	InitFontx(fx16M,"/fonts/ILMH16XB.FNT",""); // 8x16Dot Mincyo
 	InitFontx(fx24M,"/fonts/ILMH24XB.FNT",""); // 12x24Dot Mincyo
 	InitFontx(fx32M,"/fonts/ILMH32XB.FNT",""); // 16x32Dot Mincyo
-	
+*/	
 	TFT_t dev;
 
 	// Change SPI Clock Frequency
@@ -1663,7 +1713,9 @@ void TheTimeClark(void *pvParameters)
 
 */
 
-		doProjectScreen(&dev, CONFIG_WIDTH, CONFIG_HEIGHT, fx32G, fx24G, fx16G, fx32L);
+		doProjectScreen(&dev, CONFIG_WIDTH, CONFIG_HEIGHT, fx32G, fx24G, fxDSEG24, fx32L, fxDSEG7M);
+		WAIT; WAIT; WAIT; WAIT; WAIT; WAIT;
+
 
 
 /*
@@ -1868,7 +1920,7 @@ void app_main(void)
 {
 	ESP_LOGI(TAG, "Initializing SPIFFS");
 	// Maximum files that could be open at the same time is 7.
-	ESP_ERROR_CHECK(mountSPIFFS("/fonts", "storage1", 7));
+	ESP_ERROR_CHECK(mountSPIFFS("/fonts", "storage1", 10));
 	listSPIFFS("/fonts/");
 
 	// Maximum files that could be open at the same time is 1.
