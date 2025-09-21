@@ -20,9 +20,11 @@
 
 #include <driver/gpio.h>
 
-#define PIN_BUTTON1 36
-#define PIN_BUTTON2 39
-#define PIN_BUTTON3 34
+// avoid display pins MOSI=23, SCLK=18, CS=15, DC=2, RESET=4, BL=32
+
+#define PIN_BUTTON1 27
+#define PIN_BUTTON2 26
+#define PIN_BUTTON3 25
 
 #define INTERVAL 400
 #define WAIT vTaskDelay(INTERVAL)
@@ -494,7 +496,7 @@ TickType_t doProjectScreen(bool complete_redraw, TFT_t * dev, int width, int hei
 	TickType_t startTick, endTick, diffTick;
 	startTick = xTaskGetTickCount();
 	uint8_t ascii[20];
-	char separator[2] = {':', ' '};
+	//char separator[2] = {':', ' '};
 
 	//if (complete_redraw) {
 
@@ -585,7 +587,7 @@ TickType_t doProjectScreen(bool complete_redraw, TFT_t * dev, int width, int hei
 
 	endTick = xTaskGetTickCount();
 	diffTick = endTick - startTick;
-	ESP_LOGI(__FUNCTION__, "elapsed time[ms]:%"PRIu32,diffTick*portTICK_PERIOD_MS);
+	//ESP_LOGI(__FUNCTION__, "elapsed time[ms]:%"PRIu32,diffTick*portTICK_PERIOD_MS);
 	return diffTick;
 }
 
@@ -2043,18 +2045,21 @@ void logic_task(void *pvParameters) {
 void button_task(void *pvParameters) {
     while (1) {
         if (gpio_get_level(PIN_BUTTON1) == 0) { // active low?
+			ESP_LOGI(TAG, "PIN_BUTTON1 pressed");
             button_event_t ev = BUTTON_EVENT_STARTSTOP;
             xQueueSend(button_queue, &ev, 0);
         }
         if (gpio_get_level(PIN_BUTTON2) == 0) {
+			//ESP_LOGI(TAG, "PIN_BUTTON2 pressed");
             button_event_t ev = BUTTON_EVENT_NEXT;
             xQueueSend(button_queue, &ev, 0);
-        }
+         }
         if (gpio_get_level(PIN_BUTTON3) == 0) {
+			//ESP_LOGI(TAG, "PIN_BUTTON3 pressed");
             button_event_t ev = BUTTON_EVENT_PREV;
             xQueueSend(button_queue, &ev, 0);
         }
-        vTaskDelay(pdMS_TO_TICKS(50)); // simple debounce
+        vTaskDelay(pdMS_TO_TICKS(200)); // simple debounce
     }
 }
 
@@ -2077,6 +2082,36 @@ void app_main(void)
 
 	button_queue = xQueueCreate(10, sizeof(button_event_t));
 	g_state_mutex = xSemaphoreCreateMutex();
+
+	
+	gpio_config_t io_conf = {
+        .pin_bit_mask = 1ULL << PIN_BUTTON1,
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,    // use pull-up
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE
+    };
+    gpio_config(&io_conf);
+	
+
+	// Configure button 1
+    /*
+	gpio_reset_pin(PIN_BUTTON1);
+    gpio_set_direction(PIN_BUTTON1, GPIO_MODE_INPUT);
+    gpio_set_pull_mode(PIN_BUTTON1, GPIO_PULLUP_ONLY); // Enable internal pull-up
+	*/
+
+	// Configure button 2
+    gpio_reset_pin(PIN_BUTTON2);
+    gpio_set_direction(PIN_BUTTON2, GPIO_MODE_INPUT);
+    gpio_set_pull_mode(PIN_BUTTON2, GPIO_PULLUP_ONLY); // Enable internal pull-up
+
+	// Configure button 3
+	gpio_reset_pin(PIN_BUTTON3);
+	gpio_set_direction(PIN_BUTTON3, GPIO_MODE_INPUT);
+	gpio_set_pull_mode(PIN_BUTTON3, GPIO_PULLUP_ONLY); // Enable internal pull-up
+
+
 
 	strcpy(g_state.projects[0].name, "The TimeClark");
 	strcpy(g_state.projects[1].name, "Project 2");
