@@ -5,6 +5,7 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
 #include "esp_err.h"
 #include "esp_log.h"
 #include "esp_system.h"
@@ -69,7 +70,19 @@ typedef enum {
     BUTTON_EVENT_PREV
 } button_event_t;
 
-QueueHandle_t button_queue;
+//QueueHandle_t button_queue;
+
+
+// Queue to send button events from ISR to task
+//static xQueueHandle gpio_evt_queue = NULL;
+QueueHandle_t button_queue = NULL;
+
+
+// ISR handler for button presses
+static void IRAM_ATTR gpio_isr_handler(void* arg) {
+	int gpio_num = (int) arg;
+	xQueueSendFromISR(button_queue, &gpio_num, NULL);
+}
 
 
 
@@ -502,8 +515,13 @@ TickType_t doProjectScreen(bool complete_redraw, TFT_t * dev, int width, int hei
 
 		uint16_t color;
 		lcdFillScreen(dev, BLACK);
-		lcdDrawFillRect(dev, 4, 4, 85, 316, GREEN);
-		
+
+		if (g_state.projects[g_state.current_project].running == true) {
+			lcdDrawFillRect(dev, 4, 4, 85, 316, GREEN);
+		} else {
+			lcdDrawFillRect(dev, 4, 4, 85, 316, RED);
+		}
+
 		uint8_t fontWidth;
 		uint8_t fontHeight;
 		GetFontx(fx, 0, &fontWidth, &fontHeight);
@@ -2011,6 +2029,8 @@ void logic_task(void *pvParameters) {
     while (1) {
         if (xQueueReceive(button_queue, &ev, portMAX_DELAY)) {
             xSemaphoreTake(g_state_mutex, portMAX_DELAY);
+			
+			printf("button_queue passed something to logic_task\n");
 
             project_t *proj = &g_state.projects[g_state.current_project];
 
@@ -2041,6 +2061,7 @@ void logic_task(void *pvParameters) {
 }
 
 
+/*
 
 void button_task(void *pvParameters) {
     while (1) {
@@ -2063,6 +2084,38 @@ void button_task(void *pvParameters) {
     }
 }
 
+*/
+
+void button_task(void* arg) {
+    int io_num;
+    while (1) {
+        if (xQueueReceive(button_queue, &io_num, portMAX_DELAY)) {
+            // simple debounce: small delay to filter bounces
+            vTaskDelay(pdMS_TO_TICKS(50));
+            if (gpio_get_level(io_num) == 0) { // still pressed
+                printf("Button on GPIO %d pressed!\n", io_num);
+				
+				button_event_t ev;
+
+				switch (io_num) {
+					case PIN_BUTTON1: 
+						ev = BUTTON_EVENT_STARTSTOP;
+						xQueueSend(button_queue, &ev, 0);
+						break;
+					case PIN_BUTTON2: 
+						ev = BUTTON_EVENT_NEXT;
+						xQueueSend(button_queue, &ev, 0);
+						break;
+					case PIN_BUTTON3: 
+						ev = BUTTON_EVENT_PREV;
+						xQueueSend(button_queue, &ev, 0);
+						break;
+					
+				}
+            }
+        }
+    }
+}
 
 
 void app_main(void)
@@ -2085,43 +2138,37 @@ void app_main(void)
 
 	
 	gpio_config_t io_conf = {
-        .pin_bit_mask = 1ULL << PIN_BUTTON1,
-        .mode = GPIO_MODE_INPUT,
-        .pull_up_en = GPIO_PULLUP_ENABLE,    // use pull-up
+		.intr_type = GPIO_INTR_NEGEDGE, // interrupt of falling edge
+		.mode = GPIO_MODE_INPUT,
+        .pin_bit_mask = (1ULL << PIN_BUTTON1) | (1ULL << PIN_BUTTON2) | (1ULL << PIN_BUTTON3),
+        .pull_up_en = GPIO_PULLUP_ENABLE,  
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_DISABLE
+        
     };
     gpio_config(&io_conf);
+
+	// Create queue
+	//gpio_evt_queue = xQueueCreate(10, sizeof(int));
 	
-
-	// Configure button 1
-    /*
-	gpio_reset_pin(PIN_BUTTON1);
-    gpio_set_direction(PIN_BUTTON1, GPIO_MODE_INPUT);
-    gpio_set_pull_mode(PIN_BUTTON1, GPIO_PULLUP_ONLY); // Enable internal pull-up
-	*/
-
-	// Configure button 2
-    gpio_reset_pin(PIN_BUTTON2);
-    gpio_set_direction(PIN_BUTTON2, GPIO_MODE_INPUT);
-    gpio_set_pull_mode(PIN_BUTTON2, GPIO_PULLUP_ONLY); // Enable internal pull-up
-
-	// Configure button 3
-	gpio_reset_pin(PIN_BUTTON3);
-	gpio_set_direction(PIN_BUTTON3, GPIO_MODE_INPUT);
-	gpio_set_pull_mode(PIN_BUTTON3, GPIO_PULLUP_ONLY); // Enable internal pull-up
-
-
-
 	strcpy(g_state.projects[0].name, "The TimeClark");
 	strcpy(g_state.projects[1].name, "Project 2");
 	strcpy(g_state.projects[2].name, "Project 3");
+	
+	g_state.projects[0].running = false;
+	g_state.projects[1].running = false;
+	g_state.projects[2].running = false;
 
-	xTaskCreate(button_task, "button_task", 2048, NULL, 5, NULL);
+	xTaskCreate(button_task, "button_task", 2048, NULL, 10, NULL);
 	xTaskCreate(logic_task, "logic_task", 4096, NULL, 5, NULL);
     xTaskCreate(display_task, "display_task", 4096, NULL, 5, NULL);
 
+	// Install the ISR service
+	gpio_install_isr_service(0);
+	gpio_isr_handler_add(PIN_BUTTON1, gpio_isr_handler, (void*) PIN_BUTTON1);
+	gpio_isr_handler_add(PIN_BUTTON2, gpio_isr_handler, (void*) PIN_BUTTON2);
+	gpio_isr_handler_add(PIN_BUTTON3, gpio_isr_handler, (void*) PIN_BUTTON3);
 
+	printf("Buttons initialized using interrupts.\n");
 
 	//xTaskCreate(TheTimeClark, "TheTimeClark", 1024*6, NULL, 2, NULL);
 }
