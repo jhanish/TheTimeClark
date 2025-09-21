@@ -18,6 +18,12 @@
 #include "decode_png.h"
 #include "pngle.h"
 
+#include <driver/gpio.h>
+
+#define PIN_BUTTON1 36
+#define PIN_BUTTON2 39
+#define PIN_BUTTON3 34
+
 #define INTERVAL 400
 #define WAIT vTaskDelay(INTERVAL)
 
@@ -34,6 +40,36 @@ static const char *TAG = "TheTimeClark";
 #define CONFIG_RESET_GPIO 15
 #define CONFIG_BL_GPIO -1
 #endif
+
+
+#define MAX_PROJECTS 99
+
+typedef struct {
+    char name[32];
+    time_t total_seconds;
+    bool running;
+    time_t last_start;
+} project_t;
+
+typedef struct {
+    project_t projects[MAX_PROJECTS];
+    int current_project;
+} app_state_t;
+
+app_state_t g_state;
+SemaphoreHandle_t g_state_mutex;
+
+
+
+typedef enum {
+    BUTTON_EVENT_STARTSTOP,
+    BUTTON_EVENT_NEXT,
+    BUTTON_EVENT_PREV
+} button_event_t;
+
+QueueHandle_t button_queue;
+
+
 
 void traceHeap() {
 	static uint32_t _free_heap_size = 0;
@@ -131,7 +167,7 @@ TickType_t ArrowTest(TFT_t * dev, FontxFile *fx, int width, int height) {
 		xpos = (width - (strlen((char *)ascii) * fontWidth)) / 2;
 		lcdSetFontDirection(dev, DIRECTION0);
 	}
-	color = WHITE;
+	color = WHITE; 
 	lcdDrawString(dev, fx, xpos, ypos, ascii, color);
 
 	lcdSetFontDirection(dev, 0);
@@ -454,30 +490,45 @@ TickType_t RoundRectTest(TFT_t * dev, int width, int height) {
 
 
 
-TickType_t doProjectScreen(TFT_t * dev, int width, int height, FontxFile *fx, FontxFile *fx2, FontxFile *fx3, FontxFile *fx4, FontxFile *fx5) {
+TickType_t doProjectScreen(bool complete_redraw, TFT_t * dev, int width, int height, FontxFile *fx, FontxFile *fx2, FontxFile *fx3, FontxFile *fx4, FontxFile *fx5) {
 	TickType_t startTick, endTick, diffTick;
 	startTick = xTaskGetTickCount();
-
-	uint16_t color;
-	lcdFillScreen(dev, BLACK);
-
-	lcdDrawFillRect(dev, 4, 4, 85, 316, GREEN);
-	
-	uint8_t fontWidth;
-	uint8_t fontHeight;
-	GetFontx(fx, 0, &fontWidth, &fontHeight);
-
-	color = GRAY;
 	uint8_t ascii[20];
-	strcpy((char *)ascii, "01");
-	lcdSetFontDirection(dev, 1);
-	lcdDrawString(dev, fx, 130, 10, ascii, color);
-	strcpy((char *)ascii, "The TimeClark");
-	lcdDrawString(dev, fx, 130, 60, ascii, WHITE);
+	char separator[2] = {':', ' '};
 
-	GetFontx(fx2, 0, &fontWidth, &fontHeight);
-	strcpy((char *)ascii, "27.5 Hrs this week");
-	lcdDrawString(dev, fx2, 100, 10, ascii, CYAN);
+	//if (complete_redraw) {
+
+		uint16_t color;
+		lcdFillScreen(dev, BLACK);
+		lcdDrawFillRect(dev, 4, 4, 85, 316, GREEN);
+		
+		uint8_t fontWidth;
+		uint8_t fontHeight;
+		GetFontx(fx, 0, &fontWidth, &fontHeight);
+
+		color = GRAY;
+		
+		strcpy((char *)ascii, "01");
+		lcdSetFontDirection(dev, 1);
+		lcdDrawString(dev, fx, 130, 10, ascii, color);
+		strcpy((char *)ascii, "The TimeClark");
+		lcdDrawString(dev, fx, 130, 60, ascii, WHITE);
+
+		GetFontx(fx2, 0, &fontWidth, &fontHeight);
+		strcpy((char *)ascii, "27.5 Hrs this week");
+		lcdDrawString(dev, fx2, 100, 10, ascii, CYAN);
+
+		// Horizontal line 
+		lcdDrawLine(dev, 46, 1, 46, 318, BLACK);
+		lcdDrawLine(dev, 47, 1, 47, 318, BLACK);
+		lcdDrawLine(dev, 48, 1, 48, 318, BLACK);
+
+		// Vertical line coming from the previous
+		lcdDrawLine(dev, 88, 194, 46, 194, BLACK);
+		lcdDrawLine(dev, 88, 195, 46, 195, BLACK);
+		lcdDrawLine(dev, 88, 196, 46, 196, BLACK);
+
+	//}
 
 
 
@@ -493,7 +544,13 @@ TickType_t doProjectScreen(TFT_t * dev, int width, int height, FontxFile *fx, Fo
 	strcpy((char *)ascii, strftime_buf);
 	lcdDrawString(dev, fx2, 52, 12, ascii, BLACK);
 
-	strftime(strftime_buf, sizeof(strftime_buf), "%I:%M %p", &timeinfo);
+    
+    if (timeinfo.tm_sec % 2) {
+		strftime(strftime_buf, sizeof(strftime_buf), "%I:%M %p", &timeinfo);
+	}
+	else {
+		strftime(strftime_buf, sizeof(strftime_buf), "%I %M %p", &timeinfo);
+	}
 
 	strcpy((char *)ascii, strftime_buf);
 	lcdDrawString(dev, fx2, 52, 205, ascii, BLACK);
@@ -503,15 +560,7 @@ TickType_t doProjectScreen(TFT_t * dev, int width, int height, FontxFile *fx, Fo
 
 
 
-	// Horizontal line 
-	lcdDrawLine(dev, 46, 1, 46, 318, BLACK);
-	lcdDrawLine(dev, 47, 1, 47, 318, BLACK);
-	lcdDrawLine(dev, 48, 1, 48, 318, BLACK);
 
-	// Vertical line coming from the previous
-	lcdDrawLine(dev, 88, 194, 46, 194, BLACK);
-	lcdDrawLine(dev, 88, 195, 46, 195, BLACK);
-	lcdDrawLine(dev, 88, 196, 46, 196, BLACK);
 
 
 /*
@@ -1018,7 +1067,7 @@ TickType_t JPEGTest(TFT_t * dev, char * file, int width, int height) {
 	return diffTick;
 }
 
-TickType_t PNGTest(TFT_t * dev, char * file, int width, int height) {
+TickType_t DrawPNG(TFT_t * dev, char * file, int width, int height) {
 	TickType_t startTick, endTick, diffTick;
 	startTick = xTaskGetTickCount();
 
@@ -1603,33 +1652,6 @@ void TheTimeClark(void *pvParameters)
 	InitFontx(fxDSEG7M,"/fonts/DSEG7M.FNT",""); // 7 Segment Display Medium
 	InitFontx(fxDSEG24,"/fonts/DSEG24.FNT",""); // 7 Segment Display 24Dot
 
-	/*
-	FontxFile fxdigii15[2];
-	FontxFile fxdigii30[2];
-	FontxFile fxdigii45[2];
-
-	InitFontx(fxdigii15, "/fonts/DIGII-15.FNT", ""); // 8x15Dot Digital Italic
-	InitFontx(fxdigii30, "/fonts/DIGII-30.FNT", ""); // 16x30Dot Digital Italic
-	InitFontx(fxdigii45, "/fonts/DIGII-45.FNT", ""); // 24x45Dot Digital Italic
-
-	FontxFile fxdigit15[2];
-	FontxFile fxdigit30[2];
-	FontxFile fxdigit45[2];
-
-	InitFontx(fxdigit15, "/fonts/DIGIT-15.FNT", ""); // 8x15Dot Digital Italic
-	InitFontx(fxdigit30, "/fonts/DIGIT-30.FNT", ""); // 16x30Dot Digital Italic
-	InitFontx(fxdigit45, "/fonts/DIGIT-45.FNT", ""); // 24x45Dot Digital Italic
-	*/
-
-
-/*
-	FontxFile fx16M[2];
-	FontxFile fx24M[2];
-	FontxFile fx32M[2];
-	InitFontx(fx16M,"/fonts/ILMH16XB.FNT",""); // 8x16Dot Mincyo
-	InitFontx(fx24M,"/fonts/ILMH24XB.FNT",""); // 12x24Dot Mincyo
-	InitFontx(fx32M,"/fonts/ILMH32XB.FNT",""); // 16x32Dot Mincyo
-*/	
 	TFT_t dev;
 
 	// Change SPI Clock Frequency
@@ -1645,7 +1667,8 @@ void TheTimeClark(void *pvParameters)
 	lcdInversionOff(&dev);
 #endif
 
-	char file[32];
+	//char file[32];
+
 #if 0
 	while (1) {
 		FillTest(&dev, CONFIG_WIDTH, CONFIG_HEIGHT);
@@ -1713,7 +1736,7 @@ void TheTimeClark(void *pvParameters)
 
 */
 
-		doProjectScreen(&dev, CONFIG_WIDTH, CONFIG_HEIGHT, fx32G, fx24G, fxDSEG24, fx32L, fxDSEG7M);
+		doProjectScreen(true, &dev, CONFIG_WIDTH, CONFIG_HEIGHT, fx32G, fx24G, fxDSEG24, fx32L, fxDSEG7M);
 		WAIT; WAIT; WAIT; WAIT; WAIT; WAIT;
 
 
@@ -1916,6 +1939,127 @@ esp_err_t mountSPIFFS(char * path, char * label, int max_files) {
 }
 
 
+
+void display_task(void *pvParameters) {
+    
+	// set font file
+	FontxFile fx16G[2];
+	FontxFile fx24G[2];
+	FontxFile fx32G[2];
+	FontxFile fx32L[2];
+	FontxFile fxDSEG7[2];
+	FontxFile fxDSEG7M[2];
+	FontxFile fxDSEG24[2];
+
+	InitFontx(fx16G,"/fonts/ILGH16XB.FNT",""); // 8x16Dot Gothic
+	InitFontx(fx24G,"/fonts/ILGH24XB.FNT",""); // 12x24Dot Gothic
+	InitFontx(fx32G,"/fonts/ILGH32XB.FNT",""); // 16x32Dot Gothic
+	InitFontx(fx32L,"/fonts/LATIN32B.FNT",""); // 16x32Dot Latin
+	InitFontx(fxDSEG7,"/fonts/DSEG7.FNT",""); // 7 Segment Display 
+	InitFontx(fxDSEG7M,"/fonts/DSEG7M.FNT",""); // 7 Segment Display Medium
+	InitFontx(fxDSEG24,"/fonts/DSEG24.FNT",""); // 7 Segment Display 24Dot
+
+	TFT_t dev;
+	//dev. = true;
+	// Change SPI Clock Frequency
+	//spi_clock_speed(40000000); // 40MHz
+	//spi_clock_speed(60000000); // 60MHz
+
+	spi_master_init(&dev, CONFIG_MOSI_GPIO, CONFIG_SCLK_GPIO, CONFIG_CS_GPIO, CONFIG_DC_GPIO, CONFIG_RESET_GPIO, CONFIG_BL_GPIO);
+	lcdInit(&dev, CONFIG_WIDTH, CONFIG_HEIGHT, CONFIG_OFFSETX, CONFIG_OFFSETY);
+
+#if CONFIG_INVERSION
+	ESP_LOGI(TAG, "Enable Display Inversion");
+	//lcdInversionOn(&dev);
+	lcdInversionOff(&dev);
+#endif
+	
+	char buf[64];
+    TickType_t last_wake = xTaskGetTickCount();
+
+	doProjectScreen(true, &dev, CONFIG_WIDTH, CONFIG_HEIGHT, fx32G, fx24G, fxDSEG24, fx32L, fxDSEG7M);
+
+    while (1) {
+        xSemaphoreTake(g_state_mutex, portMAX_DELAY);
+        project_t *proj = &g_state.projects[g_state.current_project];
+
+        time_t elapsed = proj->total_seconds;
+        if (proj->running) {
+            elapsed += time(NULL) - proj->last_start;
+        }
+
+        snprintf(buf, sizeof(buf), "%s\nTime: %ld sec",
+                 proj->name, (long)elapsed);
+        
+				 // call your display drawing function here
+		
+		doProjectScreen(false, &dev, CONFIG_WIDTH, CONFIG_HEIGHT, fx32G, fx24G, fxDSEG24, fx32L, fxDSEG7M);
+
+        xSemaphoreGive(g_state_mutex);
+
+        vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(1000)); // update every second
+    }
+}
+
+
+
+
+void logic_task(void *pvParameters) {
+    button_event_t ev;
+    while (1) {
+        if (xQueueReceive(button_queue, &ev, portMAX_DELAY)) {
+            xSemaphoreTake(g_state_mutex, portMAX_DELAY);
+
+            project_t *proj = &g_state.projects[g_state.current_project];
+
+            switch (ev) {
+                case BUTTON_EVENT_STARTSTOP:
+                    if (proj->running) {
+                        proj->total_seconds += time(NULL) - proj->last_start;
+                        proj->running = false;
+                    } else {
+                        proj->last_start = time(NULL);
+                        proj->running = true;
+                    }
+                    break;
+
+                case BUTTON_EVENT_NEXT:
+                    g_state.current_project = (g_state.current_project + 1) % MAX_PROJECTS;
+                    break;
+
+                case BUTTON_EVENT_PREV:
+                    g_state.current_project =
+                        (g_state.current_project - 1 + MAX_PROJECTS) % MAX_PROJECTS;
+                    break;
+            }
+
+            xSemaphoreGive(g_state_mutex);
+        }
+    }
+}
+
+
+
+void button_task(void *pvParameters) {
+    while (1) {
+        if (gpio_get_level(PIN_BUTTON1) == 0) { // active low?
+            button_event_t ev = BUTTON_EVENT_STARTSTOP;
+            xQueueSend(button_queue, &ev, 0);
+        }
+        if (gpio_get_level(PIN_BUTTON2) == 0) {
+            button_event_t ev = BUTTON_EVENT_NEXT;
+            xQueueSend(button_queue, &ev, 0);
+        }
+        if (gpio_get_level(PIN_BUTTON3) == 0) {
+            button_event_t ev = BUTTON_EVENT_PREV;
+            xQueueSend(button_queue, &ev, 0);
+        }
+        vTaskDelay(pdMS_TO_TICKS(50)); // simple debounce
+    }
+}
+
+
+
 void app_main(void)
 {
 	ESP_LOGI(TAG, "Initializing SPIFFS");
@@ -1931,5 +2075,18 @@ void app_main(void)
 	ESP_ERROR_CHECK(mountSPIFFS("/icons", "storage3", 1));
 	listSPIFFS("/icons/");
 
-	xTaskCreate(TheTimeClark, "TheTimeClark", 1024*6, NULL, 2, NULL);
+	button_queue = xQueueCreate(10, sizeof(button_event_t));
+	g_state_mutex = xSemaphoreCreateMutex();
+
+	strcpy(g_state.projects[0].name, "The TimeClark");
+	strcpy(g_state.projects[1].name, "Project 2");
+	strcpy(g_state.projects[2].name, "Project 3");
+
+	xTaskCreate(button_task, "button_task", 2048, NULL, 5, NULL);
+	xTaskCreate(logic_task, "logic_task", 4096, NULL, 5, NULL);
+    xTaskCreate(display_task, "display_task", 4096, NULL, 5, NULL);
+
+
+
+	//xTaskCreate(TheTimeClark, "TheTimeClark", 1024*6, NULL, 2, NULL);
 }
