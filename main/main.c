@@ -573,9 +573,35 @@ TickType_t doProjectScreen(bool complete_redraw, TFT_t * dev, int width, int hei
 	}
 
 	strcpy((char *)ascii, strftime_buf);
+
+/*
+typedef struct {
+    char name[32];
+    time_t total_seconds;
+    bool running;
+    time_t last_start;
+} project_t;
+*/
+
+	//g_state.projects[g_state.current_project].total_seconds = 
+
 	lcdDrawString(dev, fx2, 52, 205, ascii, BLACK);
 
-	strcpy((char *)ascii, "06:37:49");
+	time_t current_project_time;
+
+	if (g_state.projects[g_state.current_project].running) {
+		current_project_time = g_state.projects[g_state.current_project].total_seconds + (now - g_state.projects[g_state.current_project].last_start);
+	}
+	else {
+		current_project_time = g_state.projects[g_state.current_project].total_seconds;
+	}
+
+	localtime_r(&current_project_time, &timeinfo);
+
+
+	strftime(strftime_buf, sizeof(strftime_buf), "%H:%M:%S", &timeinfo);
+	strcpy((char *)ascii, strftime_buf);
+	//strcpy((char *)ascii, "06:37:49");
 	lcdDrawString(dev, fx5, 7, 115, ascii, BLACK);
 
 
@@ -2036,6 +2062,7 @@ void logic_task(void *pvParameters) {
 
             switch (ev) {
                 case BUTTON_EVENT_STARTSTOP:
+					printf("BUTTON_EVENT_STARTSTOP received in logic_task\n");
                     if (proj->running) {
                         proj->total_seconds += time(NULL) - proj->last_start;
                         proj->running = false;
@@ -2100,15 +2127,18 @@ void button_task(void* arg) {
 				switch (io_num) {
 					case PIN_BUTTON1: 
 						ev = BUTTON_EVENT_STARTSTOP;
-						xQueueSend(button_queue, &ev, 0);
+						xQueueSendToFront(button_queue, &ev, 0);
+						printf("Sent BUTTON_EVENT_STARTSTOP to button_queue\n");
 						break;
 					case PIN_BUTTON2: 
 						ev = BUTTON_EVENT_NEXT;
-						xQueueSend(button_queue, &ev, 0);
+						xQueueSendToFront(button_queue, &ev, 0);
+						printf("Sent BUTTON_EVENT_NEXT to button_queue\n");
 						break;
 					case PIN_BUTTON3: 
 						ev = BUTTON_EVENT_PREV;
-						xQueueSend(button_queue, &ev, 0);
+						xQueueSendToFront(button_queue, &ev, 0);
+						printf("Sent BUTTON_EVENT_PREV to button_queue\n");
 						break;
 					
 				}
