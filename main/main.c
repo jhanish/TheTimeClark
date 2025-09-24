@@ -528,12 +528,18 @@ TickType_t doProjectScreen(bool complete_redraw, TFT_t * dev, int width, int hei
 
 		color = GRAY;
 		
-		strcpy((char *)ascii, "01");
+		// Do the project number
+		char project_number[12];
+		sprintf(project_number, "%0*d", 2, g_state.current_project + 1);
+		strcpy((char *)ascii, project_number);
 		lcdSetFontDirection(dev, 1);
 		lcdDrawString(dev, fx, 130, 10, ascii, color);
-		strcpy((char *)ascii, "The TimeClark");
+		
+		// Project name
+		strcpy((char *)ascii, g_state.projects[g_state.current_project].name);
 		lcdDrawString(dev, fx, 130, 60, ascii, WHITE);
 
+		// Hours this week
 		GetFontx(fx2, 0, &fontWidth, &fontHeight);
 		strcpy((char *)ascii, "27.5 Hrs this week");
 		lcdDrawString(dev, fx2, 100, 10, ascii, CYAN);
